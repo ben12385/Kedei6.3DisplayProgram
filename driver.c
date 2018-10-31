@@ -3,12 +3,14 @@
    
 static int my_init(void)
 {
-                       return  0;
+	register_chrdev(0, "Kedi"
+	printk(KERN_INFO "Hello world 1. \n")
+	return  0;
 }
    
 static void my_exit(void)
 {
-                       return;
+	return;
 }
    
 module_init(my_init);
