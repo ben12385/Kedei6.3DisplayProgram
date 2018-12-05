@@ -4,7 +4,7 @@
 static int my_init(void)
 {
 	register_chrdev(0, "Kedi"
-	printk(KERN_INFO "Hello world 1. \n")
+	printk(KERN_INFO "Hello world 1. \n");
 	return  0;
 }
    
