@@ -33,6 +33,12 @@ def sendColour(colour):
 	spi.writebytes(toSend)
 	GPIO.output(8, 0)
 	
+def sendPixel(toSend):
+	global spi
+	GPIO.output(8, 1)
+	spi.writebytes(toSend)
+	GPIO.output(8, 0)	
+	
 def sendImage(image):
 	global spi
 	
@@ -230,12 +236,10 @@ for a in range(0, 480):
 
 for a in range(0, 320):
 	currentImage.append(copy.deepcopy(row))
-	
-imageCompare = copy.deepcopy(currentImage)
-oldImage = copy.deepcopy(currentImage)
 
 print("Starting")
 while True:
+	pastTime = time.time()	
 	#Load framebuffer data
 	framebuffer = open("//dev//fb0", "r")
 	imageRaw = framebuffer.read()
@@ -251,13 +255,11 @@ while True:
 	a = 0
 	for y in range(0, 320):
 		for x in range(0, 480):
-			currentImage[y][x][0] = ord(imageRaw[a*2])
-			currentImage[y][x][1] = ord(imageRaw[a*2+1])
+			byte1 = ord(imageRaw[a*2])
+			byte2 = ord(imageRaw[a*2+1])
 			a += 1
 			
-			if currentImage[y][x][0] != oldImage[y][x][0] or currentImage[y][x][1] != oldImage[y][x][1]:
-				imageCompare[y][x][0] = currentImage[y][x][0]
-				imageCompare[y][x][1] = currentImage[y][x][1]
+			if currentImage[y][x][0] != byte1 or currentImage[y][x][1] != byte2:
 				if x < topLeftX:
 					topLeftX = x
 				if y < topLeftY:
@@ -267,22 +269,23 @@ while True:
 					lowerRightX = x
 				if y > lowerRightY:
 					lowerRightY = y
+			currentImage[y][x][0] = byte1
+			currentImage[y][x][1] = byte2
 	
-			oldImage[y][x][0] = currentImage[y][x][0]
-			oldImage[y][x][1] = currentImage[y][x][1]
+	#Check to see if need to rewrite screen
+	if lowerRightX-topLeftX < 0:
+		continue
 	
-	pastTime = time.time()	
-	#Load up image
-	image = list()	
+	
+	#Load up image, this section and below takes 2.5 seconds, half the time of the refresh
+	setFrame(topLeftX, topLeftY, lowerRightX-topLeftX+2, lowerRightY-topLeftY+2)
+	toSend = [0x15, 0, 0]
 	for y in range(topLeftY, lowerRightY+1):
 		for x in range(topLeftX, lowerRightX+1): 
-			toSend = [0x15, imageCompare[y][x][1], imageCompare[y][x][0]]
-			image.append(toSend)
+			toSend[1] = currentImage[y][x][1]
+			toSend[2] = currentImage[y][x][0]
+			sendPixel(toSend)
 
-	
-	print(topLeftX, topLeftY, lowerRightX-topLeftX+1, lowerRightY-topLeftY+1)
-	setFrame(topLeftX, topLeftY, lowerRightX-topLeftX+1, lowerRightY-topLeftY+1)	
-	sendImage(image)
 	print(time.time()-pastTime)
 
 print("Done")
