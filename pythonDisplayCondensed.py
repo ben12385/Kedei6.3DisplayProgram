@@ -17,8 +17,8 @@ spi.max_speed_hz = 32000000
 #Reset display
 def resetDisplay():
 	global spi
-	to_send1 = [0x00, 0x01, 0x00, 0x00]
-	to_send = [0x00, 0x00, 0x00, 0x00]
+	to_send1 = [0x01, 0x00, 0x00]
+	to_send = [0x00, 0x00, 0x00]
 	spi.writebytes(to_send1)
 	time.sleep(0.1)
 	spi.writebytes(to_send)
@@ -38,14 +38,6 @@ def sendPixel(toSend):
 	GPIO.output(8, 1)
 	spi.writebytes(toSend)
 	GPIO.output(8, 0)	
-	
-def sendImage(image):
-	global spi
-	
-	for colour in image:
-		GPIO.output(8,1)
-		spi.writebytes(colour)
-		GPIO.output(8,0)
 
 def sendCommand(cmd):					#0x11 is 00010001     0x15 00010101    #Does it work with 1 and 5 instead of 11 and 15????
 	global spi							#10001	
@@ -57,9 +49,7 @@ def sendCommand(cmd):					#0x11 is 00010001     0x15 00010101    #Does it work w
 def sendData(data):
 	global spi
 	GPIO.output(8, 1)
-	
 	toSend = [0x15, 0x00, data]
-	
 	spi.writebytes(toSend)
 	GPIO.output(8, 0)
 
@@ -84,16 +74,9 @@ resetDisplay()
 
 time.sleep(0.01)
 
-#NOP for what???
-sendCommand(0x00)
-
-#No idea what FF is for could be nothing
-sendCommand(0xFF)
-sendCommand(0xFF)
-sendCommand(0xFF)
-sendCommand(0xFF)
-sendCommand(0xFF)
-sendCommand(0xFF)
+#Do software reset and wait 5msec for values to reset to default value
+sendCommand(0x01)
+time.sleep(0.05)
 
 #Exit sleep mode, wait 5ms before seconding next command, load all default values
 sendCommand(0x11)
@@ -222,8 +205,10 @@ pastTime = time.time()
 print("Making it black")
 setFrame(0, 0, 480, 320)
 value = random.randint(0, 255*255)	
-for a in range(0, 480*320):
-	sendColour(value)
+sendColour(value)
+for a in range(0, 480*320-1):
+	GPIO.output(8, 1)
+	GPIO.output(8, 0)
 
 print(time.time()-pastTime)
 
@@ -239,7 +224,7 @@ for a in range(0, 320):
 
 print("Starting")
 while True:
-	pastTime = time.time()	
+	pastTime = time.time()
 	#Load framebuffer data
 	framebuffer = open("//dev//fb0", "r")
 	imageRaw = framebuffer.read()
@@ -255,9 +240,9 @@ while True:
 	a = 0
 	for y in range(0, 320):
 		for x in range(0, 480):
-			byte1 = ord(imageRaw[a*2])
-			byte2 = ord(imageRaw[a*2+1])
-			a += 1
+			byte1 = ord(imageRaw[a])
+			byte2 = ord(imageRaw[a+1])
+			a += 2
 			
 			if currentImage[y][x][0] != byte1 or currentImage[y][x][1] != byte2:
 				if x < topLeftX:
@@ -271,21 +256,25 @@ while True:
 					lowerRightY = y
 			currentImage[y][x][0] = byte1
 			currentImage[y][x][1] = byte2
-	
+				
 	#Check to see if need to rewrite screen
 	if lowerRightX-topLeftX < 0:
 		continue
 	
-	
 	#Load up image, this section and below takes 2.5 seconds, half the time of the refresh
-	setFrame(topLeftX, topLeftY, lowerRightX-topLeftX+2, lowerRightY-topLeftY+2)
-	toSend = [0x15, 0, 0]
+	setFrame(topLeftX, topLeftY, lowerRightX-topLeftX+1, lowerRightY-topLeftY+1)
+	toSend = [0x15, -1, -1]
 	for y in range(topLeftY, lowerRightY+1):
-		for x in range(topLeftX, lowerRightX+1): 
-			toSend[1] = currentImage[y][x][1]
-			toSend[2] = currentImage[y][x][0]
-			sendPixel(toSend)
-
+		for x in range(topLeftX, lowerRightX+1): 		
+			if currentImage[y][x][1] == toSend[1] and currentImage[y][x][0] == toSend[2]:
+				GPIO.output(8, 1)
+				GPIO.output(8, 0)
+			else:
+				toSend[1] = currentImage[y][x][1]
+				toSend[2] = currentImage[y][x][0]
+				sendPixel(toSend)
+			
 	print(time.time()-pastTime)
+	
 
 print("Done")
