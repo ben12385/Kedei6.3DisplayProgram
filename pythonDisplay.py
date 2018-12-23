@@ -2,6 +2,8 @@ import spidev
 import time
 import RPi.GPIO as GPIO
 import random
+import numpy as np
+import copy
 
 #Disable Touchscreen
 GPIO.setmode(GPIO.BCM)
@@ -210,31 +212,74 @@ sendCommand(0x29)
 #Write to memory
 #sendCommand(0x2C)
 
-
-framebuffer = open("//dev//fb0", "r")
-imageRaw = framebuffer.read()
-imageData = list()
-
-for a in range(0, len(imageRaw)):
-	imageData.append(ord(imageRaw[a]))
-
-
-#Make it black
 print("Making it black")
-setFrame(0,0,480,320)	
-
-#value = random.randint(0, 255*255)
-
-#toSend = [0x15 value>>8, value&0xFF]
-#toSend = [0x15, 0xF8, 0xC1] #0000 000b bbbb
-
-image = list()
-
+setFrame(0, 0, 480, 320)
+value = random.randint(0, 255*255)	
 for a in range(0, 480*320):
-		toSend = [0x15, imageData[a*2], imageData[a*2+1]]
-		image.append(toSend)
-		#sendColour(value)
-		#image.append(toSend)
-sendImage(image)
+	sendColour(value)
+
+#Prep data structure for image
+currentImage = list()
+
+row = list()
+for a in range(0, 480):
+	row.append([-1,-1])
+
+for a in range(0, 320):
+	currentImage.append(copy.deepcopy(row))
+	
+imageCompare = copy.deepcopy(currentImage)
+oldImage = copy.deepcopy(currentImage)
+
+print("Starting")
+while True:
+	#Load framebuffer data
+	pastTime = time.time()
+	framebuffer = open("//dev//fb0", "r")
+	imageRaw = framebuffer.read()
+	framebuffer.close()
+	
+	#Find box to draw and convert framebuffer data
+	topLeftX = 480
+	topLeftY = 320
+	lowerRightX = 0
+	lowerRightY = 0
+	
+	image = list()
+	a = 0
+	for y in range(0, 320):
+		for x in range(0, 480):
+			currentImage[y][x][0] = ord(imageRaw[a*2])
+			currentImage[y][x][1] = ord(imageRaw[a*2+1])
+			a += 1
+			
+			if currentImage[y][x][0] != oldImage[y][x][0] or currentImage[y][x][1] != oldImage[y][x][1]:
+				imageCompare[y][x][0] = currentImage[y][x][0]
+				imageCompare[y][x][1] = currentImage[y][x][1]
+				if x < topLeftX:
+					topLeftX = x
+				if y < topLeftY:
+					topLeftY = y
+			
+				if x > lowerRightX:
+					lowerRightX = x
+				if y > lowerRightY:
+					lowerRightY = y
+	
+			oldImage[y][x][0] = currentImage[y][x][0]
+			oldImage[y][x][1] = currentImage[y][x][1]
+						
+	#Load up image
+	image = list()	
+	for y in range(topLeftY, lowerRightY+1):
+		for x in range(topLeftX, lowerRightX+1): 
+			toSend = [0x15, imageCompare[y][x][1], imageCompare[y][x][0]]
+			image.append(toSend)
+
+	
+	print(topLeftX, topLeftY, lowerRightX-topLeftX+1, lowerRightY-topLeftY+1)
+	setFrame(topLeftX, topLeftY, lowerRightX-topLeftX+1, lowerRightY-topLeftY+1)	
+	sendImage(image)
+	print(time.time()-pastTime)
 
 print("Done")
