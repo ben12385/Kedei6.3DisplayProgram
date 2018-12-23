@@ -31,17 +31,27 @@ def sendColour(colour):
 	spi.writebytes(toSend)
 	GPIO.output(8, 0)
 	
-def sendCommand(cmd):
+def sendImage(image):
 	global spi
+	
+	for colour in image:
+		GPIO.output(8,1)
+		spi.writebytes(colour)
+		GPIO.output(8,0)
+
+def sendCommand(cmd):					#0x11 is 00010001     0x15 00010101    #Does it work with 1 and 5 instead of 11 and 15????
+	global spi							#10001	
 	GPIO.output(8, 1)
-	toSend = [0x11, 0x00, cmd]
+	toSend = [0x11, 0x00, cmd] #0001, 0011, not possible, 1111, 0111, 0010, 0011
 	spi.writebytes(toSend)
 	GPIO.output(8, 0)
 	
 def sendData(data):
 	global spi
 	GPIO.output(8, 1)
+	
 	toSend = [0x15, 0x00, data]
+	
 	spi.writebytes(toSend)
 	GPIO.output(8, 0)
 
@@ -61,7 +71,7 @@ def setFrame(x,y,w,h):
 	sendCommand(0x2C)
 	
 	
-	
+#Start	
 resetDisplay()
 
 time.sleep(0.01)
@@ -83,7 +93,7 @@ time.sleep(0.05)
 
 #RGB Interface Singal Control but did not select RBG interface
 sendCommand(0xB0)
-sendData(0x00)
+sendData(0x80) #Try, may not work, set back to 0x00
 
 #Set frame rate for partial mode which is weird as it is in normal mode, commented out, instant blackout
 #sendCommand(0xB3)
@@ -201,15 +211,30 @@ sendCommand(0x29)
 #sendCommand(0x2C)
 
 
+framebuffer = open("//dev//fb0", "r")
+imageRaw = framebuffer.read()
+imageData = list()
 
+for a in range(0, len(imageRaw)):
+	imageData.append(ord(imageRaw[a]))
 
 
 #Make it black
 print("Making it black")
 setFrame(0,0,480,320)	
 
-value = random.randint(0, 255*255)
+#value = random.randint(0, 255*255)
+
+#toSend = [0x15 value>>8, value&0xFF]
+#toSend = [0x15, 0xF8, 0xC1] #0000 000b bbbb
+
+image = list()
+
 for a in range(0, 480*320):
-	sendColour(value)
+		toSend = [0x15, imageData[a*2], imageData[a*2+1]]
+		image.append(toSend)
+		#sendColour(value)
+		#image.append(toSend)
+sendImage(image)
 
 print("Done")
