@@ -84,7 +84,7 @@ time.sleep(0.05)
 
 #RGB Interface Singal Control but did not select RBG interface
 sendCommand(0xB0)
-sendData(0x80) #Try, may not work, set back to 0x00
+sendData(0x00) #Try, may not work, set back to 0x00
 
 #Set frame rate for partial mode which is weird as it is in normal mode, commented out, instant blackout
 #sendCommand(0xB3)
