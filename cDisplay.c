@@ -13,17 +13,23 @@
 #define LCD_CS 1
 #define LCD_WIDTH  480
 #define LCD_HEIGHT 320
+#define DELAY 400
 
 int resetDisplay();
 int sendToLCD(char *data, int len);
 void sendColour(unsigned char colour);
-void setFrame(int x, int y, int w, int h);
+void setFrame(int topLeftX, int topLeftY, int bottomRightX, int bottomRightY);
 void sendCommand(unsigned char cmd);
 void sendData(unsigned char data);
+void sendPixel(unsigned char pixel1, unsigned char pixel2);
+void duplicateFrameBuffer(unsigned char *prevFrame, unsigned char *currentFrame);
 
 
 int main()
 {
+	//Change framebuffer display size
+	system("fbset -g 480 320 480 320 16");
+		
 	//Open connection to lcd
 	if(wiringPiSetup() < 0){
 		exit(-1);
@@ -35,21 +41,11 @@ int main()
 	if(wiringPiSPISetup(LCD_CS, 32000000)<0){
         exit(-1);
 	}
-   
-	unsigned char command[3];
-	command[0] = 0x11;
-	command[1] = 0x00;
-	command[2] = 0x00;
-	
-	unsigned char data[3];
-	data[0] = 0x15;
-	data[1] = 0x00;
-	data[2] = 0x00;
-	
+
 	//Prepare LCD
 	resetDisplay();
 		
-	//Software Reset
+	//Software Reset	
 	sendCommand(0x01);
 	delay(200);
 	
@@ -57,7 +53,7 @@ int main()
 	sendCommand(0x11);
 	delay(200);
 
-	//RGB Interface Singal Control but did not select RBG interface
+	//RGB Interface Singal Control but did not select RBG interface	
 	sendCommand(0xB0);
 	sendData(0x80);
 
@@ -140,18 +136,132 @@ int main()
 	//On the display
 	sendCommand(0x29);
 	
-	printf("Making it black\n");
-	setFrame(0, 0, 480, 320);
+	//printf("Making it black\n");
+	setFrame(0, 0, 479, 319);
 	
-	sendColour(0x0F);
+	sendColour(0x99);
 	for(int a = 0; a<480*320; a++)
 	{
 		digitalWrite(10, HIGH);
 		digitalWrite(10, LOW);
 	}
-
-	FILE *f = fopen("//dev//fb0", "rb");
 	
+	
+	// allocate memory for entire content
+	unsigned char *prevFrame;
+	prevFrame = calloc(480*320*2, 1);
+	
+	unsigned char *currentFrame;
+	currentFrame = calloc(480*320*2, 1);
+	if(!prevFrame ){
+		printf("Memory Alloc for either prevFrame or currentFrame Fails\n");
+		exit(1);
+	}
+
+	//Load first frame
+	duplicateFrameBuffer(prevFrame,currentFrame);
+
+	
+	int pixelLocation;
+	int topLeftX;
+	int topLeftY;
+	int lowerRightX;
+	int lowerRightY;
+	int readAmount;
+	while(1){
+		
+		topLeftX = 480;
+		topLeftY = 320;
+		lowerRightX = 0;
+		lowerRightY = 0;
+		
+		FILE *f;
+		f = fopen("//dev//fb0", "rb");
+		fseek(f , 0, SEEK_SET);
+		if(fread(currentFrame , 1, 480*320*2, f) != 480*320*2){
+			fclose(f);
+			free(currentFrame);
+			printf("Read framebuffer fails\n");
+			exit(1);
+		}
+		fclose(f);
+
+		//Find box to draw and convert framebuffer data				
+		for(int y = 0; y<320; y++){
+			for(int x = 0; x<480; x++){
+				pixelLocation = ((y*480)+x)*2;
+				
+				if(prevFrame[pixelLocation] != currentFrame[pixelLocation] || prevFrame[pixelLocation+1] != currentFrame[pixelLocation+1]){				
+					if(x < topLeftX){
+						topLeftX = x;
+					}
+					if(y < topLeftY){
+						topLeftY = y;
+					}
+					if(x > lowerRightX){
+						lowerRightX = x;	
+					}
+					if(y > lowerRightY){
+						lowerRightY = y;
+						//printf("Update Y to %d\n", y); 	
+					}
+				}
+				prevFrame[pixelLocation] = currentFrame[pixelLocation];
+				prevFrame[pixelLocation+1] = currentFrame[pixelLocation+1];
+			}
+			//printf("Y: %d\n", y);
+		}
+
+		if(lowerRightX-topLeftX < 0){
+			continue;
+		}
+		
+		
+		
+		//printf("TopLeftX: %d, TopLeftY: %d, LowerRightX: %d, LowerRightY: %d\n", topLeftX, topLeftY, lowerRightX, lowerRightY);
+		setFrame(topLeftX, topLeftY, lowerRightX, lowerRightY);
+		
+		int firstPixelLocation = topLeftY*480+topLeftX;
+		
+		unsigned char pixelA = currentFrame[firstPixelLocation+1];
+		unsigned char pixelB = currentFrame[firstPixelLocation];
+		unsigned char prevPixelA = currentFrame[firstPixelLocation+1];
+		unsigned char prevPixelB = currentFrame[firstPixelLocation];
+		sendPixel(pixelA, pixelB);
+		
+		for(int y = topLeftY; y<lowerRightY+1; y++)
+		{
+			for(int x = topLeftX; x<lowerRightX+1; x++)
+			{
+				if(y == topLeftY && x == topLeftX){
+					continue;
+				}
+				
+				pixelLocation = ((y*480)+x)*2;
+				
+				pixelA = currentFrame[pixelLocation+1];
+				pixelB = currentFrame[pixelLocation];
+				
+				if(pixelA == prevPixelA && pixelB == prevPixelB)
+				{
+					digitalWrite(10, HIGH);
+					digitalWrite(10, LOW);
+					for(int b = 0; b<DELAY; b++){
+					}
+				}
+				else
+				{
+					sendPixel(pixelA, pixelB);
+				}
+				prevPixelA = pixelA;
+				prevPixelB = pixelB;
+			}
+		}
+	}
+	
+	free(prevFrame);
+	free(currentFrame);	
+	printf("Done\n");
 	return 0;
 	
 }
@@ -207,19 +317,73 @@ void sendColour(unsigned char colour){
 	sendToLCD(&toSend[0], sizeof(toSend));
 }
 
-void setFrame(int x, int y, int w, int h){
+void sendPixel(unsigned char pixel1, unsigned char pixel2){
+	unsigned char toSend[3];
+	toSend[0] = 0x15;
+	toSend[1] = pixel1;
+	toSend[2] = pixel2;
+	sendToLCD(&toSend[0], sizeof(toSend));
+}
+
+void setFrame(int topLeftX, int topLeftY, int bottomRightX, int bottomRightY){
 	sendCommand(0x2A);
-	sendData(x>>8);
-	sendData(x&0xFF);
-	sendData(((w+x)-1)>>8);
-	sendData(((w+x)-1)&0xFF);
+	sendData(topLeftX>>8);
+	sendData(topLeftX&0xFF);
+	sendData((bottomRightX)>>8);
+	sendData((bottomRightX)&0xFF);
 	
 	sendCommand(0x2B);
-	sendData(y>>8);
-	sendData(y&0xFF);
-	sendData(((h+y)-1)>>8);
-	sendData(((h+y)-1)&0xFF);
+	sendData(topLeftY>>8);
+	sendData(topLeftY&0xFF);
+	sendData((bottomRightY)>>8);
+	sendData((bottomRightY)&0xFF);
 
 	sendCommand(0x2C);
 }
+
+void duplicateFrameBuffer(unsigned char *prevFrame, unsigned char *currentFrame){		
+	FILE *f;
+	f = fopen("//dev//fb0", "rb");
 	
+	fseek(f , 0, SEEK_SET);
+	
+	if(fread(currentFrame , 1, 480*320*2, f) != 480*320*2){
+		fclose(f);
+		free(currentFrame);
+		printf("Read framebuffer fails\n");
+		exit(1);
+	}
+	fclose(f);
+	
+	//Draw frame
+	setFrame(0,0, 479, 319);
+	unsigned char pixelA = currentFrame[1];
+	unsigned char pixelB = currentFrame[0];
+	unsigned char prevPixelA = currentFrame[1];
+	unsigned char prevPixelB = currentFrame[0];
+	prevFrame[1] = pixelA;	
+	prevFrame[0] = pixelB;
+	
+	sendPixel(pixelA, pixelB);
+	
+	for(int a =1; a<480*320+1; a++){
+		pixelA = currentFrame[(a*2)+1];
+		pixelB = currentFrame[a*2];
+		
+		if(pixelA == prevPixelA && pixelB == prevPixelB)
+		{
+			digitalWrite(10, HIGH);
+			digitalWrite(10, LOW);
+			for(int b = 0; b<DELAY; b++){
+			}
+		}
+		else
+		{
+			sendPixel(pixelA, pixelB);
+		}
+		prevFrame[(a*2)+1] = pixelA;	
+		prevFrame[(a*2)] = pixelB;
+		prevPixelA = pixelA;
+		prevPixelB = pixelB;
+	}
+}
