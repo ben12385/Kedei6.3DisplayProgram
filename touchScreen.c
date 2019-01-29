@@ -12,7 +12,7 @@
 
 
 #define IRQ_PIN 6
-#define Touch_CS 0
+#define TOUCH_CS 0
 
 int main()
 {	
@@ -23,18 +23,34 @@ int main()
 	else{
 		pinMode(IRQ_PIN, INPUT);
 	}
-	while(1){
-		if(digitalRead(6) == 0){
-			printf("Touch detected\n");
-		}
-	}
 	if(wiringPiSPISetup(TOUCH_CS, 32000000)<0){
         exit(-1);
 	}
 	
-	unsigned char data[1];
+	int preventRepeat = 0;
+	int ret = 0;
+	unsigned char data[3];
+	data[1] = 0;
+	data[2] = 0;
 	
+	while(1){
+		preventRepeat = 1;
+		printf("Touch detected1\n");
+		data[0] = 0x93;			//10010011
+		data[1] = 0;
+		data[2] = 0;
 	
-	ret = wiringPiSPIDataRW(TOUCH_CS, data, 1);
+		ret = wiringPiSPIDataRW(TOUCH_CS, data, 3);
+		printf("%d\n", data[1]);
+		printf("%d\n\n", data[2]);
+		
+		data[0] = 0xD3;			//11010011
+		data[1] = 0;
+		data[2] = 0;
 	
+		ret = wiringPiSPIDataRW(TOUCH_CS, data, 3);
+		printf("%d\n", data[1]);
+		printf("%d\n\n", data[2]);
+		for(int a = 0; a<100000000; a++);
+	}
 }
