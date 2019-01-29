@@ -7,18 +7,13 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <time.h>
-#include <sys/mman.h>
 #include <wiringPiSPI.h>
 #include <wiringPi.h>
-#include <stdint.h>
 
 #define LCD_CS 1
 #define LCD_WIDTH  480
 #define LCD_HEIGHT 320
 #define DELAY 400
-#define	BLOCK_SIZE		(4*1024)
-#define HIGH 1
-#define LOW 0
 
 int resetDisplay();
 int sendToLCD(char *data, int len);
@@ -29,48 +24,21 @@ void sendData(unsigned char data);
 void sendPixel(unsigned char pixel1, unsigned char pixel2);
 void duplicateFrameBuffer(unsigned char *prevFrame, unsigned char *currentFrame);
 
-static volatile unsigned int *gpio;
-
-void digitalWrite(int a, int b){
-	if(b){
-		*(gpio + 7) = 1 << (8 & 31) ;
-	}
-	else{
-		*(gpio + 10) = 1 << (8 & 31) ;
-	}
-}
-
-int gpioSetup(){
-	int fd = open("/dev/gpiomem", O_RDWR | O_SYNC | O_CLOEXEC);
-	if(fd < 0){	// We're using gpiomem
-		printf("Unable to open /dev/mem or /dev/gpiomem: %s.\n Aborting your program because if it can not access the GPIO hardware then it most certianly won't work\n", strerror(errno)) ;
-		return -1; 
-	}
-	gpio = (uint32_t *)mmap(0, BLOCK_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0x00200000) ;
-	if (gpio == MAP_FAILED)
-	{
-		printf("mmap (GPIO) failed: %s\n", strerror (errno));
-		return -1;
-	}
-	return 1;
-}
 
 int main()
 {
 	//Change framebuffer display size
-	system("fbset -g 480 320 480 320 16");	
+	system("fbset -g 480 320 480 320 16");
+		
 	//Open connection to lcd
-	if(gpioSetup() < 0){
+	if(wiringPiSetup() < 0){
 		exit(-1);
 	}
 	else{
-		*(gpio + 0) = (*(gpio + 0) & ~(7 << 24)) | (1 << 24);
-		//Set to high
-		*(gpio + 7) = 1 << (8 & 31) ;
+		pinMode(10, OUTPUT);
+		digitalWrite(10, HIGH);
 	}
-	printf("Problem/n");
 	if(wiringPiSPISetup(LCD_CS, 32000000)<0){
-		printf("Problem/n");
         exit(-1);
 	}
 
