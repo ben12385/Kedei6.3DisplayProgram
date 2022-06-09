@@ -208,8 +208,8 @@ int main()
 		lowerRightY = 0;
 		
 		FILE *f;
-		f = fopen("//dev//fb0", "rb");
-		fseek(f , 0, SEEK_SET);
+		f = fopen("//dev//shm//Xvfb_screen0", "rb");
+		fseek(f , -480*320*2, SEEK_END);
 		if(fread(currentFrame , 1, 480*320*2, f) != 480*320*2){
 			fclose(f);
 			free(currentFrame);
@@ -375,10 +375,9 @@ void setFrame(int topLeftX, int topLeftY, int bottomRightX, int bottomRightY){
 
 void duplicateFrameBuffer(unsigned char *prevFrame, unsigned char *currentFrame){		
 	FILE *f;
-	f = fopen("//dev//fb0", "rb");
+	f = fopen("//dev//shm//Xvfb_screen0", "rb");
 	
-	fseek(f , 0, SEEK_SET);
-	
+	fseek(f , -480*320*2, SEEK_END);	
 	if(fread(currentFrame , 1, 480*320*2, f) != 480*320*2){
 		fclose(f);
 		free(currentFrame);
